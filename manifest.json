@@ -1,0 +1,20 @@
+{
+  "name": "Local Group Chat",
+  "short_name": "LocalChat",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#0084ff",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192.png?text=Chat",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512.png?text=Chat",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
