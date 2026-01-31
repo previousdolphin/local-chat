@@ -88,6 +88,15 @@
         .manual-input-container { display: none; margin-top: 15px; width: 100%; }
         .manual-input-container.show { display: block; }
         .manual-input-container textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: none; font-family: monospace; font-size: 12px; }
+
+        /* --- ZOOM CONTROLS --- */
+        .zoom-controls { display: none; margin-top: 15px; width: 100%; }
+        .zoom-controls.show { display: block; }
+        .zoom-slider { width: 100%; margin: 10px 0; }
+        .zoom-buttons { display: flex; justify-content: center; gap: 15px; margin-top: 5px; }
+        .zoom-btn { width: 40px; height: 40px; border-radius: 50%; background: #0084ff; color: white; border: none; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .zoom-btn:disabled { background: #ccc; }
+        .zoom-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -158,6 +167,16 @@
             <div id="manual-input-container" class="manual-input-container">
                 <textarea id="manual-code" rows="4" placeholder="Paste the connection code here..."></textarea>
                 <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="handleManualCode()">Connect</button>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div id="zoom-controls" class="zoom-controls">
+                <div class="zoom-label">Zoom: <span id="zoom-value">1.0</span>x</div>
+                <input type="range" id="zoom-slider" class="zoom-slider" min="1" max="3" step="0.1" value="1" oninput="updateZoom(this.value)">
+                <div class="zoom-buttons">
+                    <button class="zoom-btn" onclick="setZoom(-0.2)">−</button>
+                    <button class="zoom-btn" onclick="setZoom(0.2)">+</button>
+                </div>
             </div>
         </div>
     </div>
@@ -255,6 +274,7 @@
             document.getElementById('video-preview').style.display = 'none';
             document.getElementById('qr-scanner-overlay').style.display = 'none';
             document.getElementById('manual-input-container').classList.remove('show');
+            document.getElementById('zoom-controls').classList.remove('show');
             updateStatus('Generating connection code...', true);
 
             pc.onicecandidate = (e) => {
@@ -335,6 +355,8 @@
         // --- 5. QR SCANNER ---
         let scanAttempts = 0;
         const MAX_SCAN_ATTEMPTS = 300; // ~5 seconds at 60fps
+        let currentZoom = 1;
+        let videoStream = null;
 
         function startScanner(hostPC = null) {
             const modal = document.getElementById('modal-qr');
@@ -342,9 +364,13 @@
             document.getElementById('qr-canvas').style.display = 'none';
             document.getElementById('qr-scanner-overlay').style.display = 'block';
             document.getElementById('manual-input-container').classList.remove('show');
+            document.getElementById('zoom-controls').classList.add('show');
             const video = document.getElementById('video-preview');
             video.style.display = 'block';
             scanAttempts = 0;
+            currentZoom = 1;
+            document.getElementById('zoom-slider').value = 1;
+            document.getElementById('zoom-value').innerText = '1.0';
 
             updateStatus('Requesting camera access...', false);
             navigator.mediaDevices.getUserMedia({ 
@@ -354,13 +380,56 @@
                     height: { ideal: 720 }
                 } 
             }).then(stream => {
+                videoStream = stream;
                 video.srcObject = stream;
                 updateStatus('Point camera at QR code...', true);
                 video.play();
+                initZoomCapabilities(stream.getVideoTracks()[0]);
                 requestAnimationFrame(() => tick(video, hostPC));
             }).catch(err => {
                 updateStatus('Camera access denied. Use manual entry.', false);
                 showManualToggle();
+                document.getElementById('zoom-controls').classList.remove('show');
+            });
+        }
+
+        function initZoomCapabilities(track) {
+            const capabilities = track.getCapabilities();
+            const slider = document.getElementById('zoom-slider');
+            const zoomLabel = document.getElementById('zoom-value');
+            
+            if (capabilities.zoom) {
+                slider.min = capabilities.zoom.min || 1;
+                slider.max = Math.min(capabilities.zoom.max || 3, 3);
+                slider.step = capabilities.zoom.step || 0.1;
+                slider.disabled = false;
+            } else {
+                slider.disabled = true;
+                slider.title = "Zoom not supported on this device";
+            }
+        }
+
+        function updateZoom(value) {
+            currentZoom = parseFloat(value);
+            document.getElementById('zoom-value').innerText = currentZoom.toFixed(1);
+            applyZoom(currentZoom);
+        }
+
+        function setZoom(delta) {
+            const slider = document.getElementById('zoom-slider');
+            let newValue = currentZoom + delta;
+            newValue = Math.max(parseFloat(slider.min) || 1, Math.min(parseFloat(slider.max) || 3, newValue));
+            slider.value = newValue;
+            updateZoom(newValue);
+        }
+
+        function applyZoom(zoom) {
+            if (!videoStream) return;
+            const track = videoStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            track.applyConstraints({ advanced: [{ zoom: zoom }] }).catch(err => {
+                console.log('Zoom not supported:', err);
             });
         }
 
@@ -447,10 +516,12 @@
             }
             try {
                 updateStatus('Connecting...', true);
+                document.getElementById('zoom-controls').classList.remove('show');
                 await handleScan(code, null);
             } catch (err) {
                 alert('Invalid connection code. Please check and try again.');
                 updateStatus('Invalid code. Try again.', false);
+                document.getElementById('zoom-controls').classList.add('show');
             }
         }
 
@@ -545,12 +616,16 @@
             document.getElementById(id).style.display = 'none'; 
             const v = document.getElementById('video-preview'); 
             if(v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
+            videoStream = null;
             // Reset QR modal state
             document.getElementById('qr-canvas').style.display = 'none';
             document.getElementById('video-preview').style.display = 'none';
             document.getElementById('qr-scanner-overlay').style.display = 'none';
             document.getElementById('manual-input-container').classList.remove('show');
             document.getElementById('manual-code').value = '';
+            document.getElementById('zoom-controls').classList.remove('show');
+            document.getElementById('zoom-slider').value = 1;
+            document.getElementById('zoom-value').innerText = '1.0';
             scanAttempts = 0;
         }
         function confirmExit() { 
