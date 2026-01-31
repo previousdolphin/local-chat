@@ -1,5 +1,5 @@
 // --- UPDATE THIS VERSION NUMBER ---
-const CACHE_NAME = 'local-chat-history-v3'; 
+const CACHE_NAME = 'local-chat-history-v2'; 
 
 const ASSETS = [
   './',

@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        
+
         /* --- UTILS --- */
         .btn { padding: 10px 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-align: center; }
         .btn-primary { background: #0084ff; color: white; }
@@ -23,7 +23,7 @@
 
         /* --- LOBBY --- */
         .center-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; }
-        .avatar-lg { width: 100px; height: 100px; border-radius: 50%; background-size: cover; background-color: #ddd; border: 4px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .avatar-lg { width: 100px; height: 100px; border-radius: 50%; background-size: cover; background-color: #ddd; border: 4px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         input[type="text"] { padding: 12px; width: 100%; max-width: 300px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
 
         /* --- CHAT UI --- */
@@ -31,10 +31,10 @@
         .header-info { display: flex; flex-direction: column; }
         .header-title { font-weight: bold; font-size: 1.1em; }
         .header-sub { font-size: 0.8em; color: #28a745; display: flex; align-items: center; gap: 5px; }
-        
+
         .chat-area { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #e5ddd5; }
         .system-msg { text-align: center; font-size: 0.8em; color: #555; background: rgba(255,255,255,0.6); align-self: center; padding: 4px 10px; border-radius: 10px; margin: 5px 0; }
-        
+
         /* Message Bubbles */
         .msg-row { display: flex; gap: 8px; align-items: flex-end; }
         .msg-row.me { flex-direction: row-reverse; }
@@ -58,13 +58,13 @@
         .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; max-height: 80vh; }
         .user-list { overflow-y: auto; flex: 1; margin: 15px 0; border-top: 1px solid #eee; }
         .user-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
-        
+
         #video-preview { width: 100%; border-radius: 8px; background: black; display: none; }
         #qr-canvas { display: none; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; }
 
         /* --- QR Scanner Improvements --- */
         .qr-scanner-container { position: relative; width: 100%; max-width: 320px; margin: 0 auto; }
-        .qr-scanner-overlay { 
+        .qr-scanner-overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 200px; height: 200px;
             border: 3px solid rgba(0, 132, 255, 0.8);
@@ -154,15 +154,10 @@
         <div class="modal-content" style="align-items: center; text-align: center;">
             <h3 id="qr-title">Scan to Connect</h3>
             <canvas id="qr-canvas"></canvas>
-            <div class="qr-scanner-container">
-                <video id="video-preview" playsinline></video>
-                <div id="qr-scanner-overlay" class="qr-scanner-overlay" style="display: none;"></div>
-            </div>
-            <p id="qr-status" style="margin: 10px 0; color: #666;">
-                <span class="qr-status-anim"></span><span id="qr-status-text">Initializing camera...</span>
-            </p>
+            <video id="video-preview" playsinline></video>
+            <p id="qr-status" style="margin: 10px 0; color: #666;">Generating...</p>
             <button class="btn btn-outline" onclick="closeModal('modal-qr')">Cancel</button>
-            
+
             <button class="manual-toggle" onclick="toggleManualInput()">Or paste connection code manually</button>
             <div id="manual-input-container" class="manual-input-container">
                 <textarea id="manual-code" rows="4" placeholder="Paste the connection code here..."></textarea>
@@ -193,13 +188,13 @@
         // --- STATE & DB ---
         let me = { id: crypto.randomUUID(), name: '', avatar: '' };
         let isHost = false;
-        let peers = {}; 
+        let peers = {};
         let serverConn = null;
         let rtcConfig = { iceServers: [] };
         let db;
 
         // --- 1. INITIALIZATION ---
-        
+
         // Init IndexedDB
         const request = indexedDB.open("LocalChatLogs", 1);
         request.onupgradeneeded = (e) => {
@@ -282,24 +277,16 @@
                     const data = LZString.compressToBase64(JSON.stringify(pc.localDescription));
                     QRCode.toCanvas(document.getElementById('qr-canvas'), data, { width: 220 });
                     updateStatus('Let guest scan this code', false);
-                    
+
                     const btn = document.createElement('button');
                     btn.className = "btn btn-primary";
-                    btn.innerText = "Or scan guest's code";
+                    btn.innerText = "Guest Scanned? Scan Them.";
                     btn.style.marginTop = "10px";
                     btn.onclick = () => { startScanner(pc); btn.remove(); };
                     document.getElementById('qr-status').appendChild(btn);
                 }
             };
-            pc.onicegatheringstatechange = () => {
-                if (pc.iceGatheringState === 'complete') {
-                    // Already handled by onicecandidate null check
-                }
-            };
-            pc.createOffer().then(o => pc.setLocalDescription(o)).catch(err => {
-                console.error('Offer creation failed:', err);
-                updateStatus('Connection setup failed. Please try again.', false);
-            });
+            pc.createOffer().then(o => pc.setLocalDescription(o));
         }
 
         function setupHostChannel(channel, pc) {
@@ -373,30 +360,19 @@
             document.getElementById('zoom-value').innerText = '1.0';
 
             updateStatus('Requesting camera access...', false);
-            navigator.mediaDevices.getUserMedia({ 
-                video: { 
+            navigator.mediaDevices.getUserMedia({
+                video: {
                     facingMode: "environment",
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
-                } 
+                }
             }).then(stream => {
                 videoStream = stream;
                 video.srcObject = stream;
-                updateStatus('Point camera at QR code...', true);
-                video.play().catch(err => {
-                    console.error('Video play failed:', err);
-                    videoStream.getTracks().forEach(t => t.stop());
-                    videoStream = null;
-                    video.style.display = 'none';
-                    updateStatus('Camera error. Use manual entry.', false);
-                    showManualToggle();
-                    document.getElementById('zoom-controls').classList.remove('show');
-                });
+                video.play();
                 initZoomCapabilities(stream.getVideoTracks()[0]);
                 requestAnimationFrame(() => tick(video, hostPC));
             }).catch(err => {
-                console.error('Camera access failed:', err);
-                video.style.display = 'none';
                 updateStatus('Camera access denied. Use manual entry.', false);
                 showManualToggle();
                 document.getElementById('zoom-controls').classList.remove('show');
@@ -407,7 +383,7 @@
             const capabilities = track.getCapabilities();
             const slider = document.getElementById('zoom-slider');
             const zoomLabel = document.getElementById('zoom-value');
-            
+
             if (capabilities.zoom) {
                 slider.min = capabilities.zoom.min || 1;
                 slider.max = Math.min(capabilities.zoom.max || 3, 3);
@@ -437,57 +413,25 @@
             if (!videoStream) return;
             const track = videoStream.getVideoTracks()[0];
             if (!track) return;
-            
+
             track.applyConstraints({ advanced: [{ zoom: zoom }] }).catch(err => {
                 console.log('Zoom not supported:', err);
             });
         }
 
-        function updateStatus(text, showAnim) {
-            document.getElementById('qr-status-text').innerText = text;
-            document.querySelector('.qr-status-anim').style.display = showAnim ? 'inline-block' : 'none';
-        }
-
-        function showManualToggle() {
-            document.querySelector('.manual-toggle').style.display = 'inline-block';
-        }
-
-        function toggleManualInput() {
-            const container = document.getElementById('manual-input-container');
-            container.classList.toggle('show');
-            if (container.classList.contains('show')) {
-                document.getElementById('manual-code').focus();
-            }
-        }
-
         function tick(video, hostPC) {
-            if (!videoStream || video.style.display === 'none') {
-                // Scanner was stopped due to error
-                return;
-            }
-            if (scanAttempts > MAX_SCAN_ATTEMPTS) {
-                updateStatus('No QR code found. Try moving closer or use manual entry.', false);
-                showManualToggle();
-                return;
-            }
-            scanAttempts++;
-
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // Downscale for faster processing while maintaining detection accuracy
-                const scale = 0.5;
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth * scale;
                 canvas.height = video.videoHeight * scale;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
+
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-                
+
                 if (code) {
                     video.srcObject.getTracks().forEach(t => t.stop());
-                    document.getElementById('qr-scanner-overlay').style.display = 'none';
-                    updateStatus('QR code detected! Connecting...', false);
                     handleScan(code.data, hostPC);
                     return;
                 }
@@ -507,7 +451,7 @@
                     await pc.setRemoteDescription(new RTCSessionDescription(signal));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-                    
+
                     const compressed = LZString.compressToBase64(JSON.stringify(pc.localDescription));
                     document.getElementById('video-preview').style.display = 'none';
                     document.getElementById('qr-canvas').style.display = 'block';
@@ -547,10 +491,10 @@
 
             renderMessage(me, text, true);
             const msg = { type: 'chat', text: text, user: me };
-            
+
             if (isHost) broadcast(msg);
             else if (serverConn) serverConn.send(JSON.stringify(msg));
-            
+
             input.value = "";
         }
 
@@ -588,7 +532,7 @@
 
             const tx = db.transaction(["logs"], "readonly");
             const req = tx.objectStore("logs").getAll();
-            
+
             req.onsuccess = () => {
                 list.innerHTML = "";
                 const logs = req.result.reverse(); // Newest first
@@ -626,9 +570,9 @@
 
         // --- UTILS ---
         function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-        function closeModal(id) { 
-            document.getElementById(id).style.display = 'none'; 
-            const v = document.getElementById('video-preview'); 
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+            const v = document.getElementById('video-preview');
             if(v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
             videoStream = null;
             // Reset QR modal state
@@ -642,12 +586,12 @@
             document.getElementById('zoom-value').innerText = '1.0';
             scanAttempts = 0;
         }
-        function confirmExit() { 
-            if(confirm("Leave group?")) { 
-                if(isHost) broadcast({type:'close'}); 
-                else if(serverConn) serverConn.send(JSON.stringify({type:'leave'})); 
-                location.reload(); 
-            } 
+        function confirmExit() {
+            if(confirm("Leave group?")) {
+                if(isHost) broadcast({type:'close'});
+                else if(serverConn) serverConn.send(JSON.stringify({type:'leave'}));
+                location.reload();
+            }
         }
         function showParticipantsModal() {
             const list = document.getElementById('participants-list'); list.innerHTML = "";
