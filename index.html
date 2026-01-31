@@ -1,664 +1,166 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalChat Pro + History</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        
-        /* --- UTILS --- */
-        .btn { padding: 10px 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-align: center; }
-        .btn-primary { background: #0084ff; color: white; }
-        .btn-danger { background: #dc3545; color: white; }
-        .btn-outline { background: white; border: 1px solid #ddd; color: #333; }
-        .icon-btn { background: none; border: none; font-size: 1.2em; cursor: pointer; padding: 5px; }
-
-        /* --- SCREENS --- */
-        .screen { display: none; flex-direction: column; height: 100%; }
-        .active { display: flex; }
-
-        /* --- LOBBY --- */
-        .center-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; }
-        .avatar-lg { width: 100px; height: 100px; border-radius: 50%; background-size: cover; background-color: #ddd; border: 4px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        input[type="text"] { padding: 12px; width: 100%; max-width: 300px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
-
-        /* --- CHAT UI --- */
-        header { background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; height: 50px; }
-        .header-info { display: flex; flex-direction: column; }
-        .header-title { font-weight: bold; font-size: 1.1em; }
-        .header-sub { font-size: 0.8em; color: #28a745; display: flex; align-items: center; gap: 5px; }
-        
-        .chat-area { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #e5ddd5; }
-        .system-msg { text-align: center; font-size: 0.8em; color: #555; background: rgba(255,255,255,0.6); align-self: center; padding: 4px 10px; border-radius: 10px; margin: 5px 0; }
-        
-        /* Message Bubbles */
-        .msg-row { display: flex; gap: 8px; align-items: flex-end; }
-        .msg-row.me { flex-direction: row-reverse; }
-        .msg-avatar { width: 32px; height: 32px; border-radius: 50%; background-size: cover; background-color: #ccc; }
-        .bubble { max-width: 75%; padding: 8px 12px; border-radius: 18px; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-        .me .bubble { background: #0084ff; color: white; border-bottom-right-radius: 4px; }
-        .them .bubble { background: white; color: black; border-bottom-left-radius: 4px; }
-        .sender-name { font-size: 0.7em; color: #555; margin-bottom: 2px; margin-left: 4px; }
-
-        .input-area { background: white; padding: 10px; display: flex; gap: 10px; align-items: center; border-top: 1px solid #ddd; }
-
-        /* --- HISTORY SCREEN --- */
-        .history-list { padding: 0; margin: 0; list-style: none; }
-        .session-header { background: #eee; padding: 5px 15px; font-size: 0.8em; color: #666; font-weight: bold; margin-top: 10px; border-radius: 4px; }
-        .log-item { padding: 10px 15px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; background: white; }
-        .log-meta { font-size: 0.75em; color: #999; margin-bottom: 2px; }
-        .log-text { font-size: 0.95em; color: #333; }
-
-        /* --- MODALS --- */
-        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 999; display: none; align-items: center; justify-content: center; padding: 20px; }
-        .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; max-height: 80vh; }
-        .user-list { overflow-y: auto; flex: 1; margin: 15px 0; border-top: 1px solid #eee; }
-        .user-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
-        
-        #video-preview { width: 100%; border-radius: 8px; background: black; display: none; }
-        #qr-canvas { display: none; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; }
-
-        /* --- QR Scanner Improvements --- */
-        .qr-scanner-container { position: relative; width: 100%; max-width: 320px; margin: 0 auto; }
-        .qr-scanner-overlay { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 200px; height: 200px;
-            border: 3px solid rgba(0, 132, 255, 0.8);
-            border-radius: 12px;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
-            pointer-events: none;
-        }
-        .qr-scanner-overlay::before {
-            content: ''; position: absolute;
-            top: 50%; left: 10px; right: 10px; height: 2px;
-            background: rgba(0, 132, 255, 0.5);
-            animation: scanline 2s ease-in-out infinite;
-        }
-        @keyframes scanline {
-            0%, 100% { transform: translateY(-80px); opacity: 0.5; }
-            50% { transform: translateY(80px); opacity: 1; }
-        }
-        .qr-status-anim { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #28a745; margin-right: 8px; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
-        .manual-toggle { background: none; border: none; color: #0084ff; text-decoration: underline; cursor: pointer; font-size: 0.9em; margin-top: 10px; }
-        .manual-input-container { display: none; margin-top: 15px; width: 100%; }
-        .manual-input-container.show { display: block; }
-        .manual-input-container textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: none; font-family: monospace; font-size: 12px; }
-
-        /* --- ZOOM CONTROLS --- */
-        .zoom-controls { display: none; margin-top: 15px; width: 100%; }
-        .zoom-controls.show { display: block; }
-        .zoom-slider { width: 100%; margin: 10px 0; }
-        .zoom-buttons { display: flex; justify-content: center; gap: 15px; margin-top: 5px; }
-        .zoom-btn { width: 40px; height: 40px; border-radius: 50%; background: #0084ff; color: white; border: none; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .zoom-btn:disabled { background: #ccc; }
-        .zoom-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#0084ff">
+  <title>LocalChat</title>
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  
+  <!-- Preconnect to CDN -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Critical: LZString for data compression -->
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 </head>
 <body>
 
-    <div id="screen-login" class="screen active">
-        <div class="center-box">
-            <h1>LocalChat</h1>
-            <div class="avatar-lg" id="avatarPreview" onclick="document.getElementById('avatarInput').click()"></div>
-            <input type="file" id="avatarInput" accept="image/*" style="display: none;" onchange="handleAvatar(this)">
-            <input type="text" id="username" placeholder="Choose a username">
-            <button class="btn btn-primary" style="width: 100%; max-width: 300px;" onclick="saveProfile()">Start</button>
-        </div>
+  <!-- ==================== LOGIN SCREEN ==================== -->
+  <div id="screen-login" class="screen active">
+    <div class="center-box">
+      <h1>LocalChat</h1>
+      <p style="color: var(--text-secondary); margin-bottom: 20px;">Peer-to-peer group chat</p>
+      
+      <div class="avatar avatar-lg" id="avatarPreview" onclick="document.getElementById('avatarInput').click()" style="cursor: pointer;"></div>
+      <input type="file" id="avatarInput" accept="image/*" hidden onchange="handleAvatarInput(this)">
+      
+      <input type="text" id="username" placeholder="Choose a username" maxlength="30">
+      <button class="btn btn-primary" onclick="saveProfile()">Get Started</button>
     </div>
+  </div>
 
-    <div id="screen-lobby" class="screen">
-        <div class="center-box">
-            <h2 id="lobby-welcome">Welcome</h2>
-            <button class="btn btn-primary" style="width: 250px;" onclick="initHost()">Create Group (Host)</button>
-            <button class="btn btn-outline" style="width: 250px;" onclick="initJoin()">Join Group</button>
-            <button class="btn btn-outline" style="width: 250px; margin-top: 20px;" onclick="openHistory()">📜 Chat Logs</button>
-        </div>
+  <!-- ==================== LOBBY SCREEN ==================== -->
+  <div id="screen-lobby" class="screen">
+    <div class="center-box">
+      <div class="avatar avatar-lg" id="lobbyAvatar" style="width: 60px; height: 60px; margin-bottom: 10px;"></div>
+      <h2 id="lobby-welcome">Welcome</h2>
+      <p style="color: var(--text-secondary); font-size: 0.9rem;">Start a group or join an existing one</p>
+      
+      <button class="btn btn-primary" style="width: 250px;" onclick="initHost()">
+        Create Group
+      </button>
+      <button class="btn btn-outline" style="width: 250px;" onclick="initJoin()">
+        Join Group
+      </button>
+      <button class="btn btn-outline" style="width: 250px; margin-top: 15px;" onclick="openHistory()">
+        📜 Chat History
+      </button>
     </div>
+  </div>
 
-    <div id="screen-chat" class="screen">
-        <header>
-            <div class="header-info">
-                <div class="header-title" id="chat-title">Group Chat</div>
-                <div class="header-sub" id="status-indicator">● Connected</div>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button class="icon-btn" id="btnAddMember" onclick="showInviteModal()" title="Add Member" style="display:none;">➕</button>
-                <button class="icon-btn" id="btnManageUsers" onclick="showParticipantsModal()" title="Participants" style="display:none;">👥</button>
-                <button class="icon-btn" onclick="confirmExit()" title="Leave" style="color: #dc3545;">🚪</button>
-            </div>
-        </header>
-        <div id="chat-view" class="chat-area"></div>
-        <div class="input-area">
-            <input type="text" id="msgInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
-            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+  <!-- ==================== CHAT SCREEN ==================== -->
+  <div id="screen-chat" class="screen">
+    <header>
+      <div class="header-info">
+        <div class="header-title" id="chat-title">Group Chat</div>
+        <div class="header-status" id="status-indicator">
+          <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%;"></span>
+          Ready
         </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="btnAddMember" onclick="showInviteModal()" title="Add Member" style="display: none;">➕</button>
+        <button class="icon-btn" id="btnManageUsers" onclick="showParticipantsModal()" title="Participants" style="display: none;">👥</button>
+        <button class="icon-btn" onclick="confirmExit()" title="Leave" style="color: var(--danger);">🚪</button>
+      </div>
+    </header>
+    
+    <div id="chat-view" class="chat-area"></div>
+    
+    <div class="input-area">
+      <input type="text" id="msgInput" placeholder="Type a message..." maxlength="1000" autocomplete="off">
+      <button class="btn btn-primary" onclick="sendMessage()">Send</button>
     </div>
+  </div>
 
-    <div id="screen-history" class="screen">
-        <header>
-            <div class="header-title">Past Logs</div>
-            <button class="btn btn-outline" style="padding: 5px 10px;" onclick="showScreen('screen-lobby')">Back</button>
-        </header>
-        <div class="chat-area" style="background: #f0f2f5;">
-            <ul id="history-list" class="history-list"></ul>
-            <button class="btn btn-danger" onclick="clearHistory()" style="margin: 20px auto; display: block; width: 200px;">Clear All Logs</button>
+  <!-- ==================== HISTORY SCREEN ==================== -->
+  <div id="screen-history" class="screen">
+    <header>
+      <div class="header-title">Chat History</div>
+      <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.9rem;" onclick="showScreen('lobby')">Back</button>
+    </header>
+    <div class="chat-area" style="background: var(--bg-primary);">
+      <ul id="history-list" class="history-list"></ul>
+    </div>
+  </div>
+
+  <!-- ==================== QR MODAL ==================== -->
+  <div id="modal-qr" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="qr-title">Scan to Connect</h3>
+        <button class="modal-close" onclick="closeModal('modal-qr')">×</button>
+      </div>
+      
+      <canvas id="qr-canvas"></canvas>
+      
+      <div class="qr-scanner">
+        <video id="video-preview" class="qr-video" playsinline muted></video>
+        <div id="qr-scanner-overlay" class="qr-overlay">
+          <div class="qr-frame">
+            <div class="qr-scanline"></div>
+          </div>
         </div>
-    </div>
-
-    <div id="modal-qr" class="modal">
-        <div class="modal-content" style="align-items: center; text-align: center;">
-            <h3 id="qr-title">Scan to Connect</h3>
-            <canvas id="qr-canvas"></canvas>
-            <div class="qr-scanner-container">
-                <video id="video-preview" playsinline></video>
-                <div id="qr-scanner-overlay" class="qr-scanner-overlay" style="display: none;"></div>
-            </div>
-            <p id="qr-status" style="margin: 10px 0; color: #666;">
-                <span class="qr-status-anim"></span><span id="qr-status-text">Initializing camera...</span>
-            </p>
-            <button class="btn btn-outline" onclick="closeModal('modal-qr')">Cancel</button>
-            
-            <button class="manual-toggle" onclick="toggleManualInput()">Or paste connection code manually</button>
-            <div id="manual-input-container" class="manual-input-container">
-                <textarea id="manual-code" rows="4" placeholder="Paste the connection code here..."></textarea>
-                <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="handleManualCode()">Connect</button>
-            </div>
-
-            <!-- Zoom Controls -->
-            <div id="zoom-controls" class="zoom-controls">
-                <div class="zoom-label">Zoom: <span id="zoom-value">1.0</span>x</div>
-                <input type="range" id="zoom-slider" class="zoom-slider" min="1" max="3" step="0.1" value="1" oninput="updateZoom(this.value)">
-                <div class="zoom-buttons">
-                    <button class="zoom-btn" onclick="setZoom(-0.2)">−</button>
-                    <button class="zoom-btn" onclick="setZoom(0.2)">+</button>
-                </div>
-            </div>
+      </div>
+      
+      <div class="qr-status">
+        <span class="qr-status-dot"></span>
+        <span id="qr-status-text">Initializing...</span>
+      </div>
+      
+      <button class="btn btn-outline" style="width: 100%;" onclick="closeModal('modal-qr')">Cancel</button>
+      
+      <button class="manual-toggle" onclick="toggleManualInput()">
+        Or paste connection code manually
+      </button>
+      
+      <div id="manual-input-container" class="manual-input">
+        <textarea id="manual-code" rows="4" placeholder="Paste the connection code here..."></textarea>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="handleManualCode()">Connect</button>
+      </div>
+      
+      <!-- Zoom Controls -->
+      <div id="zoom-controls" class="zoom-control">
+        <div class="zoom-label">Zoom: <span id="zoom-value">1.0</span>x</div>
+        <input type="range" id="zoom-slider" class="zoom-slider" min="1" max="3" step="0.1" value="1" oninput="qrScanner?.setZoom(this.value)">
+        <div class="zoom-buttons">
+          <button class="zoom-btn" onclick="qrScanner?.adjustZoom(-0.2)">−</button>
+          <button class="zoom-btn" onclick="qrScanner?.adjustZoom(0.2)">+</button>
         </div>
+      </div>
     </div>
+  </div>
 
-    <div id="modal-users" class="modal">
-        <div class="modal-content">
-            <h3>Participants</h3>
-            <div class="user-list" id="participants-list"></div>
-            <button class="btn btn-outline" onclick="closeModal('modal-users')">Close</button>
-        </div>
+  <!-- ==================== PARTICIPANTS MODAL ==================== -->
+  <div id="modal-users" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Participants</h3>
+        <button class="modal-close" onclick="closeModal('modal-users')">×</button>
+      </div>
+      <div id="participants-list" class="participants-list"></div>
+      <button class="btn btn-outline" style="width: 100%;" onclick="closeModal('modal-users')">Close</button>
     </div>
+  </div>
 
-    <script>
-        // --- STATE & DB ---
-        let me = { id: crypto.randomUUID(), name: '', avatar: '' };
-        let isHost = false;
-        let peers = {}; 
-        let serverConn = null;
-        let rtcConfig = { iceServers: [] };
-        let db;
+  <!-- ==================== EXTERNAL SCRIPTS ==================== -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  
+  <!-- ==================== APP SCRIPTS ==================== -->
+  <script src="js/state.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/qrscanner.js"></script>
+  <script src="js/app.js"></script>
 
-        // --- 1. INITIALIZATION ---
-        
-        // Init IndexedDB
-        const request = indexedDB.open("LocalChatLogs", 1);
-        request.onupgradeneeded = (e) => {
-            const d = e.target.result;
-            if (!d.objectStoreNames.contains("logs")) {
-                d.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
-            }
-        };
-        request.onsuccess = (e) => db = e.target.result;
-
-        function archive(text, senderName, isSystem = false) {
-            if (!db) return;
-            const entry = {
-                text: text,
-                sender: senderName,
-                isSystem: isSystem,
-                timestamp: Date.now()
-            };
-            db.transaction(["logs"], "readwrite").objectStore("logs").add(entry);
-        }
-
-        // --- 2. PROFILE ---
-        function handleAvatar(input) {
-            const file = input.files[0];
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                me.avatar = e.target.result;
-                document.getElementById('avatarPreview').style.backgroundImage = `url(${me.avatar})`;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function saveProfile() {
-            const name = document.getElementById('username').value.trim();
-            if (!name) return alert("Enter name");
-            me.name = name;
-            if(!me.avatar) me.avatar = `https://ui-avatars.com/api/?name=${name}&background=random`;
-            document.getElementById('lobby-welcome').innerText = `Hi, ${name}`;
-            showScreen('screen-lobby');
-        }
-
-        // --- 3. LOGIC & ROUTING ---
-        function initHost() {
-            isHost = true;
-            peers = {};
-            setupChatUI();
-            document.getElementById('btnAddMember').style.display = 'block';
-            document.getElementById('btnManageUsers').style.display = 'block';
-            addSystemMsg("Group created.");
-        }
-
-        function initJoin() {
-            isHost = false;
-            setupChatUI();
-            startScanner();
-        }
-
-        function setupChatUI() {
-            showScreen('screen-chat');
-            document.getElementById('chat-view').innerHTML = ""; // Clear view for new session
-        }
-
-        // --- 4. WEBRTC (Host/Guest) ---
-        function showInviteModal() {
-            const pc = new RTCPeerConnection(rtcConfig);
-            const channel = pc.createDataChannel("chat");
-            setupHostChannel(channel, pc);
-
-            const modal = document.getElementById('modal-qr');
-            modal.style.display = 'flex';
-            document.getElementById('qr-canvas').style.display = 'block';
-            document.getElementById('video-preview').style.display = 'none';
-            document.getElementById('qr-scanner-overlay').style.display = 'none';
-            document.getElementById('manual-input-container').classList.remove('show');
-            document.getElementById('zoom-controls').classList.remove('show');
-            updateStatus('Generating connection code...', true);
-
-            pc.onicecandidate = (e) => {
-                if (e.candidate === null) {
-                    const data = LZString.compressToBase64(JSON.stringify(pc.localDescription));
-                    QRCode.toCanvas(document.getElementById('qr-canvas'), data, { width: 220 });
-                    updateStatus('Let guest scan this code', false);
-                    
-                    const btn = document.createElement('button');
-                    btn.className = "btn btn-primary";
-                    btn.innerText = "Or scan guest's code";
-                    btn.style.marginTop = "10px";
-                    btn.onclick = () => { startScanner(pc); btn.remove(); };
-                    document.getElementById('qr-status').appendChild(btn);
-                }
-            };
-            pc.onicegatheringstatechange = () => {
-                if (pc.iceGatheringState === 'complete') {
-                    // Already handled by onicecandidate null check
-                }
-            };
-            pc.createOffer().then(o => pc.setLocalDescription(o)).catch(err => {
-                console.error('Offer creation failed:', err);
-                updateStatus('Connection setup failed. Please try again.', false);
-            });
-        }
-
-        function setupHostChannel(channel, pc) {
-            channel.onopen = () => channel.send(JSON.stringify({ type: 'req-identity' }));
-            channel.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'identity') {
-                    peers[channel.id] = { channel, user: msg.user };
-                    closeModal('modal-qr');
-                    addSystemMsg(`${msg.user.name} joined.`);
-                } else if (msg.type === 'chat') {
-                    renderMessage(msg.user, msg.text, false);
-                    broadcast(msg, channel.id); // Relay
-                } else if (msg.type === 'leave') {
-                    removePeer(channel.id);
-                }
-            };
-            channel.onclose = () => removePeer(channel.id);
-        }
-
-        function removePeer(id) {
-            if (peers[id]) {
-                addSystemMsg(`${peers[id].user.name} disconnected.`);
-                delete peers[id];
-            }
-        }
-
-        function setupGuestChannel(channel) {
-            serverConn = channel;
-            channel.onopen = () => {
-                closeModal('modal-qr');
-                addSystemMsg("Connected to Host.");
-                channel.send(JSON.stringify({ type: 'identity', user: me }));
-            };
-            channel.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'req-identity') channel.send(JSON.stringify({ type: 'identity', user: me }));
-                else if (msg.type === 'chat') renderMessage(msg.user, msg.text, false);
-                else if (msg.type === 'system') addSystemMsg(msg.text); // Host sent system msg
-                else if (msg.type === 'close') { alert("Host ended session."); location.reload(); }
-            };
-            channel.onclose = () => { alert("Disconnected."); location.reload(); };
-        }
-
-        function broadcast(msg, excludeId) {
-            Object.keys(peers).forEach(id => {
-                if (id !== excludeId && peers[id].channel.readyState === 'open') {
-                    peers[id].channel.send(JSON.stringify(msg));
-                }
-            });
-        }
-
-        // --- 5. QR SCANNER ---
-        let scanAttempts = 0;
-        const MAX_SCAN_ATTEMPTS = 300; // ~5 seconds at 60fps
-        let currentZoom = 1;
-        let videoStream = null;
-
-        function startScanner(hostPC = null) {
-            const modal = document.getElementById('modal-qr');
-            modal.style.display = 'flex';
-            document.getElementById('qr-canvas').style.display = 'none';
-            document.getElementById('qr-scanner-overlay').style.display = 'block';
-            document.getElementById('manual-input-container').classList.remove('show');
-            document.getElementById('zoom-controls').classList.add('show');
-            const video = document.getElementById('video-preview');
-            video.style.display = 'block';
-            scanAttempts = 0;
-            currentZoom = 1;
-            document.getElementById('zoom-slider').value = 1;
-            document.getElementById('zoom-value').innerText = '1.0';
-
-            updateStatus('Requesting camera access...', false);
-            navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
-            }).then(stream => {
-                videoStream = stream;
-                video.srcObject = stream;
-                updateStatus('Point camera at QR code...', true);
-                video.play().catch(err => {
-                    console.error('Video play failed:', err);
-                    videoStream.getTracks().forEach(t => t.stop());
-                    videoStream = null;
-                    video.style.display = 'none';
-                    updateStatus('Camera error. Use manual entry.', false);
-                    showManualToggle();
-                    document.getElementById('zoom-controls').classList.remove('show');
-                });
-                initZoomCapabilities(stream.getVideoTracks()[0]);
-                requestAnimationFrame(() => tick(video, hostPC));
-            }).catch(err => {
-                console.error('Camera access failed:', err);
-                video.style.display = 'none';
-                updateStatus('Camera access denied. Use manual entry.', false);
-                showManualToggle();
-                document.getElementById('zoom-controls').classList.remove('show');
-            });
-        }
-
-        function initZoomCapabilities(track) {
-            const capabilities = track.getCapabilities();
-            const slider = document.getElementById('zoom-slider');
-            const zoomLabel = document.getElementById('zoom-value');
-            
-            if (capabilities.zoom) {
-                slider.min = capabilities.zoom.min || 1;
-                slider.max = Math.min(capabilities.zoom.max || 3, 3);
-                slider.step = capabilities.zoom.step || 0.1;
-                slider.disabled = false;
-            } else {
-                slider.disabled = true;
-                slider.title = "Zoom not supported on this device";
-            }
-        }
-
-        function updateZoom(value) {
-            currentZoom = parseFloat(value);
-            document.getElementById('zoom-value').innerText = currentZoom.toFixed(1);
-            applyZoom(currentZoom);
-        }
-
-        function setZoom(delta) {
-            const slider = document.getElementById('zoom-slider');
-            let newValue = currentZoom + delta;
-            newValue = Math.max(parseFloat(slider.min) || 1, Math.min(parseFloat(slider.max) || 3, newValue));
-            slider.value = newValue;
-            updateZoom(newValue);
-        }
-
-        function applyZoom(zoom) {
-            if (!videoStream) return;
-            const track = videoStream.getVideoTracks()[0];
-            if (!track) return;
-            
-            track.applyConstraints({ advanced: [{ zoom: zoom }] }).catch(err => {
-                console.log('Zoom not supported:', err);
-            });
-        }
-
-        function updateStatus(text, showAnim) {
-            document.getElementById('qr-status-text').innerText = text;
-            document.querySelector('.qr-status-anim').style.display = showAnim ? 'inline-block' : 'none';
-        }
-
-        function showManualToggle() {
-            document.querySelector('.manual-toggle').style.display = 'inline-block';
-        }
-
-        function toggleManualInput() {
-            const container = document.getElementById('manual-input-container');
-            container.classList.toggle('show');
-            if (container.classList.contains('show')) {
-                document.getElementById('manual-code').focus();
-            }
-        }
-
-        function tick(video, hostPC) {
-            if (!videoStream || video.style.display === 'none') {
-                // Scanner was stopped due to error
-                return;
-            }
-            if (scanAttempts > MAX_SCAN_ATTEMPTS) {
-                updateStatus('No QR code found. Try moving closer or use manual entry.', false);
-                showManualToggle();
-                return;
-            }
-            scanAttempts++;
-
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // Downscale for faster processing while maintaining detection accuracy
-                const scale = 0.5;
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth * scale;
-                canvas.height = video.videoHeight * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-                
-                if (code) {
-                    video.srcObject.getTracks().forEach(t => t.stop());
-                    document.getElementById('qr-scanner-overlay').style.display = 'none';
-                    updateStatus('QR code detected! Connecting...', false);
-                    handleScan(code.data, hostPC);
-                    return;
-                }
-            }
-            requestAnimationFrame(() => tick(video, hostPC));
-        }
-
-        async function handleScan(data, hostPC) {
-            try {
-                const signal = JSON.parse(LZString.decompressFromBase64(data));
-                if (isHost && hostPC) {
-                    await hostPC.setRemoteDescription(new RTCSessionDescription(signal));
-                    closeModal('modal-qr');
-                } else if (!isHost) {
-                    const pc = new RTCPeerConnection(rtcConfig);
-                    pc.ondatachannel = (e) => setupGuestChannel(e.channel);
-                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    
-                    const compressed = LZString.compressToBase64(JSON.stringify(pc.localDescription));
-                    document.getElementById('video-preview').style.display = 'none';
-                    document.getElementById('qr-canvas').style.display = 'block';
-                    document.getElementById('qr-scanner-overlay').style.display = 'none';
-                    QRCode.toCanvas(document.getElementById('qr-canvas'), compressed, { width: 220 });
-                    updateStatus('Show this QR code to the host.', false);
-                }
-            } catch (err) {
-                console.error('Scan error:', err);
-                updateStatus('Invalid QR code. Try again or use manual entry.', false);
-                showManualToggle();
-            }
-        }
-
-        async function handleManualCode() {
-            const code = document.getElementById('manual-code').value.trim();
-            if (!code) {
-                alert('Please paste a connection code first.');
-                return;
-            }
-            try {
-                updateStatus('Connecting...', true);
-                document.getElementById('zoom-controls').classList.remove('show');
-                await handleScan(code, null);
-            } catch (err) {
-                alert('Invalid connection code. Please check and try again.');
-                updateStatus('Invalid code. Try again.', false);
-                document.getElementById('zoom-controls').classList.add('show');
-            }
-        }
-
-        // --- 6. MESSAGING & UI ---
-        function sendMessage() {
-            const input = document.getElementById('msgInput');
-            const text = input.value.trim();
-            if (!text) return;
-
-            renderMessage(me, text, true);
-            const msg = { type: 'chat', text: text, user: me };
-            
-            if (isHost) broadcast(msg);
-            else if (serverConn) serverConn.send(JSON.stringify(msg));
-            
-            input.value = "";
-        }
-
-        function renderMessage(user, text, isMe) {
-            // Archive to DB
-            archive(text, user.name);
-
-            const container = document.getElementById('chat-view');
-            const row = document.createElement('div');
-            row.className = `msg-row ${isMe ? 'me' : 'them'}`;
-            row.innerHTML = `
-                ${!isMe ? `<div class="msg-avatar" style="background-image: url('${user.avatar}')"></div>` : ''}
-                <div>
-                    ${!isMe ? `<div class="sender-name">${user.name}</div>` : ''}
-                    <div class="bubble">${text}</div>
-                </div>`;
-            container.appendChild(row);
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function addSystemMsg(text) {
-            archive(text, "System", true); // Archive system alerts
-            const container = document.getElementById('chat-view');
-            const div = document.createElement('div');
-            div.className = 'system-msg';
-            div.innerText = text;
-            container.appendChild(div);
-        }
-
-        // --- 7. HISTORY VIEWER ---
-        function openHistory() {
-            showScreen('screen-history');
-            const list = document.getElementById('history-list');
-            list.innerHTML = "Loading...";
-
-            const tx = db.transaction(["logs"], "readonly");
-            const req = tx.objectStore("logs").getAll();
-            
-            req.onsuccess = () => {
-                list.innerHTML = "";
-                const logs = req.result.reverse(); // Newest first
-                if(logs.length === 0) { list.innerHTML = "<p style='text-align:center; padding:20px;'>No history yet.</p>"; return; }
-
-                let lastTime = 0;
-
-                logs.forEach(log => {
-                    // Group by time (if > 1 hour difference, add header)
-                    if (Math.abs(log.timestamp - lastTime) > 3600000) {
-                        const dateHeader = document.createElement('div');
-                        dateHeader.className = "session-header";
-                        dateHeader.innerText = new Date(log.timestamp).toLocaleString();
-                        list.appendChild(dateHeader);
-                        lastTime = log.timestamp;
-                    }
-
-                    const li = document.createElement('li');
-                    li.className = "log-item";
-                    li.innerHTML = `
-                        <div class="log-meta">${new Date(log.timestamp).toLocaleTimeString()} - ${log.sender}</div>
-                        <div class="log-text" style="${log.isSystem ? 'font-style:italic; color:#666;' : ''}">${log.text}</div>
-                    `;
-                    list.appendChild(li);
-                });
-            };
-        }
-
-        function clearHistory() {
-            if(confirm("Delete all chat logs permanently?")) {
-                db.transaction(["logs"], "readwrite").objectStore("logs").clear();
-                openHistory(); // Refresh
-            }
-        }
-
-        // --- UTILS ---
-        function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-        function closeModal(id) { 
-            document.getElementById(id).style.display = 'none'; 
-            const v = document.getElementById('video-preview'); 
-            if(v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
-            videoStream = null;
-            // Reset QR modal state
-            document.getElementById('qr-canvas').style.display = 'none';
-            document.getElementById('video-preview').style.display = 'none';
-            document.getElementById('qr-scanner-overlay').style.display = 'none';
-            document.getElementById('manual-input-container').classList.remove('show');
-            document.getElementById('manual-code').value = '';
-            document.getElementById('zoom-controls').classList.remove('show');
-            document.getElementById('zoom-slider').value = 1;
-            document.getElementById('zoom-value').innerText = '1.0';
-            scanAttempts = 0;
-        }
-        function confirmExit() { 
-            if(confirm("Leave group?")) { 
-                if(isHost) broadcast({type:'close'}); 
-                else if(serverConn) serverConn.send(JSON.stringify({type:'leave'})); 
-                location.reload(); 
-            } 
-        }
-        function showParticipantsModal() {
-            const list = document.getElementById('participants-list'); list.innerHTML = "";
-            document.getElementById('modal-users').style.display = 'flex';
-            Object.values(peers).forEach(p => {
-                const row = document.createElement('div'); row.className = 'user-row';
-                row.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><b>${p.user.name}</b></div><button class="btn btn-danger" onclick="kick('${p.channel.id}')">Kick</button>`;
-                list.appendChild(row);
-            });
-        }
-        function kick(id) { peers[id].channel.send(JSON.stringify({type:'kick'})); peers[id].channel.close(); delete peers[id]; showParticipantsModal(); }
-    </script>
 </body>
 </html>
