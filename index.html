@@ -383,10 +383,20 @@
                 videoStream = stream;
                 video.srcObject = stream;
                 updateStatus('Point camera at QR code...', true);
-                video.play();
+                video.play().catch(err => {
+                    console.error('Video play failed:', err);
+                    videoStream.getTracks().forEach(t => t.stop());
+                    videoStream = null;
+                    video.style.display = 'none';
+                    updateStatus('Camera error. Use manual entry.', false);
+                    showManualToggle();
+                    document.getElementById('zoom-controls').classList.remove('show');
+                });
                 initZoomCapabilities(stream.getVideoTracks()[0]);
                 requestAnimationFrame(() => tick(video, hostPC));
             }).catch(err => {
+                console.error('Camera access failed:', err);
+                video.style.display = 'none';
                 updateStatus('Camera access denied. Use manual entry.', false);
                 showManualToggle();
                 document.getElementById('zoom-controls').classList.remove('show');
@@ -451,6 +461,10 @@
         }
 
         function tick(video, hostPC) {
+            if (!videoStream || video.style.display === 'none') {
+                // Scanner was stopped due to error
+                return;
+            }
             if (scanAttempts > MAX_SCAN_ATTEMPTS) {
                 updateStatus('No QR code found. Try moving closer or use manual entry.', false);
                 showManualToggle();
