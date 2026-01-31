@@ -4,7 +4,6 @@
   "description": "Peer-to-peer group chat without servers. Connect via QR code for local communication.",
   "start_url": "./index.html",
   "scope": "./",
-  "id": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f0f2f5",
@@ -15,69 +14,10 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "icons/icon-72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "New Group",
-      "short_name": "New Group",
-      "description": "Create a new chat group",
-      "url": "./index.html?action=create",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Chat History",
-      "short_name": "History",
-      "description": "View past conversations",
-      "url": "./index.html?action=history",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "related_applications": [],

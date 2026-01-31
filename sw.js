@@ -1,23 +1,26 @@
 /**
  * LocalChat Service Worker
- * 2025 optimized with proper caching strategies
+ * Flat-hosting compatible with proper caching
  */
 
 const CACHE_NAME = 'localchat-v1';
 const STATIC_CACHE = 'localchat-static-v1';
 const DYNAMIC_CACHE = 'localchat-dynamic-v1';
 
-// Assets to precache
+// Base path detection for flat hosting
+const BASE_PATH = self.location.pathname.replace(/\/[^\/]*$/, '/') || './';
+
+// Assets to precache (relative paths work for flat hosting)
 const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './css/styles.css',
-  './js/state.js',
-  './js/storage.js',
-  './js/webrtc.js',
-  './js/qrscanner.js',
-  './js/app.js'
+  'index.html',
+  'manifest.json',
+  'css/styles.css',
+  'js/state.js',
+  'js/storage.js',
+  'js/webrtc.js',
+  'js/qrscanner.js',
+  'js/app.js',
+  'icon.svg'
 ];
 
 // CDN assets with versioning
@@ -26,13 +29,6 @@ const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'
 ];
-
-// Cache strategies
-const CACHE_STRATEGIES = {
-  STATIC: 'cache-first',
-  DYNAMIC: 'network-first',
-  CDN: 'cache-first'
-};
 
 // ==================== INSTALL ====================
 self.addEventListener('install', (event) => {
@@ -43,15 +39,17 @@ self.addEventListener('install', (event) => {
       const staticCache = await caches.open(STATIC_CACHE);
       const cdnCache = await caches.open(DYNAMIC_CACHE);
       
-      // Cache static assets
-      await staticCache.addAll(STATIC_ASSETS);
+      // Cache static assets with proper URLs
+      const staticUrls = STATIC_ASSETS.map(path => new URL(path, self.location.href).href);
+      await staticCache.addAll(staticUrls).catch(err => {
+        console.warn('[SW] Static cache partial failure:', err.message);
+      });
       console.log('[SW] Static assets cached');
       
       // Pre-cache CDN assets
       await cdnCache.addAll(CDN_ASSETS).catch(err => {
         console.warn('[SW] CDN cache failed (offline):', err.message);
       });
-      console.log('[SW] CDN assets cached');
       
       // Skip waiting to activate immediately
       await self.skipWaiting();
@@ -92,16 +90,24 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   
   // Skip chrome-extension and other non-http(s) requests
-  if (!url.protocol.startsWith('http')) return;
+  if (!url.protocol.startsWith('http') && !url.protocol.startsWith('/')) return;
   
-  // Handle different request types
-  if (isStaticAsset(url)) {
-    event.respondWith(cacheFirst(STATIC_CACHE, request));
-  } else if (isCDNAsset(url)) {
+  // Handle CDN assets with cache-first
+  if (isCDNAsset(url)) {
     event.respondWith(cacheFirst(DYNAMIC_CACHE, request));
-  } else if (isNavigationRequest(request)) {
+  } 
+  // Handle navigation requests
+  else if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request));
-  } else {
+  }
+  // Handle static assets
+  else if (isStaticAsset(url) || url.pathname.endsWith('.js') || 
+           url.pathname.endsWith('.css') || url.pathname.endsWith('.json') ||
+           url.pathname.endsWith('.svg') || url.pathname.endsWith('.png')) {
+    event.respondWith(cacheFirst(STATIC_CACHE, request));
+  }
+  // Default: network first
+  else {
     event.respondWith(networkFirst(request));
   }
 });
