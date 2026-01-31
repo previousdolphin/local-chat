@@ -23,7 +23,7 @@
 
         /* --- LOBBY --- */
         .center-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; }
-        .avatar-lg { width: 100px; height: 100px; border-radius: 50%; background-size: cover; background-color: #ddd; border: 4px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .avatar-lg { width: 100px; height: 100px; border-radius: 50%; background-size: cover; background-color: #ddd; border: 4px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         input[type="text"] { padding: 12px; width: 100%; max-width: 300px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
 
         /* --- CHAT UI --- */
@@ -61,6 +61,33 @@
         
         #video-preview { width: 100%; border-radius: 8px; background: black; display: none; }
         #qr-canvas { display: none; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; }
+
+        /* --- QR Scanner Improvements --- */
+        .qr-scanner-container { position: relative; width: 100%; max-width: 320px; margin: 0 auto; }
+        .qr-scanner-overlay { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 200px; height: 200px;
+            border: 3px solid rgba(0, 132, 255, 0.8);
+            border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .qr-scanner-overlay::before {
+            content: ''; position: absolute;
+            top: 50%; left: 10px; right: 10px; height: 2px;
+            background: rgba(0, 132, 255, 0.5);
+            animation: scanline 2s ease-in-out infinite;
+        }
+        @keyframes scanline {
+            0%, 100% { transform: translateY(-80px); opacity: 0.5; }
+            50% { transform: translateY(80px); opacity: 1; }
+        }
+        .qr-status-anim { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #28a745; margin-right: 8px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
+        .manual-toggle { background: none; border: none; color: #0084ff; text-decoration: underline; cursor: pointer; font-size: 0.9em; margin-top: 10px; }
+        .manual-input-container { display: none; margin-top: 15px; width: 100%; }
+        .manual-input-container.show { display: block; }
+        .manual-input-container textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: none; font-family: monospace; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -118,9 +145,20 @@
         <div class="modal-content" style="align-items: center; text-align: center;">
             <h3 id="qr-title">Scan to Connect</h3>
             <canvas id="qr-canvas"></canvas>
-            <video id="video-preview" playsinline></video>
-            <p id="qr-status" style="margin: 10px 0; color: #666;">Generating...</p>
+            <div class="qr-scanner-container">
+                <video id="video-preview" playsinline></video>
+                <div id="qr-scanner-overlay" class="qr-scanner-overlay" style="display: none;"></div>
+            </div>
+            <p id="qr-status" style="margin: 10px 0; color: #666;">
+                <span class="qr-status-anim"></span><span id="qr-status-text">Initializing camera...</span>
+            </p>
             <button class="btn btn-outline" onclick="closeModal('modal-qr')">Cancel</button>
+            
+            <button class="manual-toggle" onclick="toggleManualInput()">Or paste connection code manually</button>
+            <div id="manual-input-container" class="manual-input-container">
+                <textarea id="manual-code" rows="4" placeholder="Paste the connection code here..."></textarea>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="handleManualCode()">Connect</button>
+            </div>
         </div>
     </div>
 
@@ -215,22 +253,33 @@
             modal.style.display = 'flex';
             document.getElementById('qr-canvas').style.display = 'block';
             document.getElementById('video-preview').style.display = 'none';
-            document.getElementById('qr-status').innerText = "Guest must scan this.";
+            document.getElementById('qr-scanner-overlay').style.display = 'none';
+            document.getElementById('manual-input-container').classList.remove('show');
+            updateStatus('Generating connection code...', true);
 
             pc.onicecandidate = (e) => {
                 if (e.candidate === null) {
                     const data = LZString.compressToBase64(JSON.stringify(pc.localDescription));
                     QRCode.toCanvas(document.getElementById('qr-canvas'), data, { width: 220 });
+                    updateStatus('Let guest scan this code', false);
                     
                     const btn = document.createElement('button');
                     btn.className = "btn btn-primary";
-                    btn.innerText = "Guest Scanned? Scan Them.";
+                    btn.innerText = "Or scan guest's code";
                     btn.style.marginTop = "10px";
                     btn.onclick = () => { startScanner(pc); btn.remove(); };
                     document.getElementById('qr-status').appendChild(btn);
                 }
             };
-            pc.createOffer().then(o => pc.setLocalDescription(o));
+            pc.onicegatheringstatechange = () => {
+                if (pc.iceGatheringState === 'complete') {
+                    // Already handled by onicecandidate null check
+                }
+            };
+            pc.createOffer().then(o => pc.setLocalDescription(o)).catch(err => {
+                console.error('Offer creation failed:', err);
+                updateStatus('Connection setup failed. Please try again.', false);
+            });
         }
 
         function setupHostChannel(channel, pc) {
@@ -284,29 +333,78 @@
         }
 
         // --- 5. QR SCANNER ---
+        let scanAttempts = 0;
+        const MAX_SCAN_ATTEMPTS = 300; // ~5 seconds at 60fps
+
         function startScanner(hostPC = null) {
             const modal = document.getElementById('modal-qr');
             modal.style.display = 'flex';
             document.getElementById('qr-canvas').style.display = 'none';
+            document.getElementById('qr-scanner-overlay').style.display = 'block';
+            document.getElementById('manual-input-container').classList.remove('show');
             const video = document.getElementById('video-preview');
             video.style.display = 'block';
+            scanAttempts = 0;
 
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+            updateStatus('Requesting camera access...', false);
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
+            }).then(stream => {
                 video.srcObject = stream;
+                updateStatus('Point camera at QR code...', true);
                 video.play();
                 requestAnimationFrame(() => tick(video, hostPC));
+            }).catch(err => {
+                updateStatus('Camera access denied. Use manual entry.', false);
+                showManualToggle();
             });
         }
 
+        function updateStatus(text, showAnim) {
+            document.getElementById('qr-status-text').innerText = text;
+            document.querySelector('.qr-status-anim').style.display = showAnim ? 'inline-block' : 'none';
+        }
+
+        function showManualToggle() {
+            document.querySelector('.manual-toggle').style.display = 'inline-block';
+        }
+
+        function toggleManualInput() {
+            const container = document.getElementById('manual-input-container');
+            container.classList.toggle('show');
+            if (container.classList.contains('show')) {
+                document.getElementById('manual-code').focus();
+            }
+        }
+
         function tick(video, hostPC) {
+            if (scanAttempts > MAX_SCAN_ATTEMPTS) {
+                updateStatus('No QR code found. Try moving closer or use manual entry.', false);
+                showManualToggle();
+                return;
+            }
+            scanAttempts++;
+
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Downscale for faster processing while maintaining detection accuracy
+                const scale = 0.5;
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                const imageData = canvas.getContext('2d').getImageData(0,0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                canvas.width = video.videoWidth * scale;
+                canvas.height = video.videoHeight * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                
                 if (code) {
                     video.srcObject.getTracks().forEach(t => t.stop());
+                    document.getElementById('qr-scanner-overlay').style.display = 'none';
+                    updateStatus('QR code detected! Connecting...', false);
                     handleScan(code.data, hostPC);
                     return;
                 }
@@ -315,22 +413,44 @@
         }
 
         async function handleScan(data, hostPC) {
-            const signal = JSON.parse(LZString.decompressFromBase64(data));
-            if (isHost && hostPC) {
-                await hostPC.setRemoteDescription(new RTCSessionDescription(signal));
-                closeModal('modal-qr');
-            } else if (!isHost) {
-                const pc = new RTCPeerConnection(rtcConfig);
-                pc.ondatachannel = (e) => setupGuestChannel(e.channel);
-                await pc.setRemoteDescription(new RTCSessionDescription(signal));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                
-                const compressed = LZString.compressToBase64(JSON.stringify(pc.localDescription));
-                document.getElementById('video-preview').style.display = 'none';
-                document.getElementById('qr-canvas').style.display = 'block';
-                QRCode.toCanvas(document.getElementById('qr-canvas'), compressed, { width: 220 });
-                document.getElementById('qr-status').innerText = "Show to Host.";
+            try {
+                const signal = JSON.parse(LZString.decompressFromBase64(data));
+                if (isHost && hostPC) {
+                    await hostPC.setRemoteDescription(new RTCSessionDescription(signal));
+                    closeModal('modal-qr');
+                } else if (!isHost) {
+                    const pc = new RTCPeerConnection(rtcConfig);
+                    pc.ondatachannel = (e) => setupGuestChannel(e.channel);
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    
+                    const compressed = LZString.compressToBase64(JSON.stringify(pc.localDescription));
+                    document.getElementById('video-preview').style.display = 'none';
+                    document.getElementById('qr-canvas').style.display = 'block';
+                    document.getElementById('qr-scanner-overlay').style.display = 'none';
+                    QRCode.toCanvas(document.getElementById('qr-canvas'), compressed, { width: 220 });
+                    updateStatus('Show this QR code to the host.', false);
+                }
+            } catch (err) {
+                console.error('Scan error:', err);
+                updateStatus('Invalid QR code. Try again or use manual entry.', false);
+                showManualToggle();
+            }
+        }
+
+        async function handleManualCode() {
+            const code = document.getElementById('manual-code').value.trim();
+            if (!code) {
+                alert('Please paste a connection code first.');
+                return;
+            }
+            try {
+                updateStatus('Connecting...', true);
+                await handleScan(code, null);
+            } catch (err) {
+                alert('Invalid connection code. Please check and try again.');
+                updateStatus('Invalid code. Try again.', false);
             }
         }
 
@@ -421,7 +541,18 @@
 
         // --- UTILS ---
         function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; const v = document.getElementById('video-preview'); if(v.srcObject) v.srcObject.getTracks().forEach(t => t.stop()); }
+        function closeModal(id) { 
+            document.getElementById(id).style.display = 'none'; 
+            const v = document.getElementById('video-preview'); 
+            if(v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
+            // Reset QR modal state
+            document.getElementById('qr-canvas').style.display = 'none';
+            document.getElementById('video-preview').style.display = 'none';
+            document.getElementById('qr-scanner-overlay').style.display = 'none';
+            document.getElementById('manual-input-container').classList.remove('show');
+            document.getElementById('manual-code').value = '';
+            scanAttempts = 0;
+        }
         function confirmExit() { 
             if(confirm("Leave group?")) { 
                 if(isHost) broadcast({type:'close'}); 
